@@ -1,0 +1,504 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'sam-app
+
+  App to identify the genre of music audio
+
+  '
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: python3.10
+    VpcConfig:
+      SecurityGroupIds:
+      - sg-0f7a855321c64d82b
+      SubnetIds:
+      - subnet-09287db02b08972f4
+      - subnet-04a9f70f05a7ac4f5
+      - subnet-055d3904cd32bbc1d
+Resources:
+  AudioUploadGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Name: AudioUploadApi
+      Cors:
+        AllowHeaders: Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token
+        AllowMethods: OPTIONS,GET
+        AllowOrigin: '*'
+        AllowCredentials: true
+      DefinitionBody:
+        swagger: 2.0
+        info:
+          title: My Audio Upload API
+        paths:
+          /hello:
+            options:
+              responses:
+                '200':
+                  description: CORS preflight request successful
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                responses:
+                  default:
+                    statusCode: '200'
+            get:
+              responses:
+                '200':
+                  description: Hello World!
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${HealthCheckFunction.Arn}/invocations
+                httpMethod: POST
+          /upload_audio:
+            options:
+              summary: CORS support
+              description: 'Enable CORS by returning correct headers
+
+                '
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              tags:
+              - CORS
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: "{\n  \"statusCode\" : 200\n}\n"
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''*'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}
+
+                        '
+              responses:
+                '200':
+                  description: Default response for CORS method
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            get:
+              responses:
+                '200':
+                  description: Audio file uploaded successfully
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+                '500':
+                  description: Unable to generate presigned URL
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AudioUploadFunction.Arn}/invocations
+                httpMethod: POST
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''*'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+          /audio_status:
+            options:
+              summary: CORS support
+              description: 'Enable CORS by returning correct headers
+
+                '
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              tags:
+              - CORS
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/json: "{\n  \"statusCode\" : 200\n}\n"
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''*'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                    responseTemplates:
+                      application/json: '{}
+
+                        '
+              responses:
+                '200':
+                  description: Default response for CORS method
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+            get:
+              parameters:
+              - name: s3_key
+                in: query
+                required: true
+                type: string
+              responses:
+                '200':
+                  description: Audio Status returned successfully
+                  headers:
+                    Access-Control-Allow-Headers:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Origin:
+                      type: string
+                '500':
+                  description: Unable to retreive audio status
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                uri:
+                  Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AudioStatusFunction.Arn}/invocations
+                httpMethod: POST
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key'''
+                      method.response.header.Access-Control-Allow-Methods: '''*'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+        Auth:
+          ResourcePolicy:
+            CustomStatements:
+            - Effect: Allow
+              Action: execute-api:Invoke
+              Resource:
+              - execute-api:/*/*/*
+              Principal: '*'
+  HealthCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: HealthCheckFunction
+      Handler: health_check.lambda_handler
+      Architectures:
+      - x86_64
+      Events:
+        AudioUploadAPI:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: AudioUploadGateway
+            Path: /hello
+            Method: GET
+    Metadata:
+      SamResourceId: HealthCheckFunction
+  AudioUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AudioUploadFunction
+      Handler: audio_upload.lambda_handler
+      Architectures:
+      - x86_64
+      Events:
+        AudioUploadAPI:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: AudioUploadGateway
+            Path: /upload_audio
+            Method: GET
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          - s3:PutObjectAcl
+          Resource:
+          - arn:aws:s3:::audioholdbucket/*
+          - arn:aws:s3:::audioholdbucket
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:ListTables
+          Resource: arn:aws:dynamodb:us-east-1:986684718113:table/AudioStatus
+    Metadata:
+      SamResourceId: AudioUploadFunction
+  AudioStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AudioStatusFunction
+      Handler: audio_status.lambda_handler
+      Architectures:
+      - x86_64
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:GetItem
+          - dynamodb:DeleteItem
+          Resource: arn:aws:dynamodb:us-east-1:986684718113:table/AudioStatus
+      Events:
+        AudioStatusAPI:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: AudioUploadGateway
+            Path: /audio_status
+            Method: GET
+    Metadata:
+      SamResourceId: AudioStatusFunction
+  AudioProcessDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AudioProcessDLQ
+  AudioProcessQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AudioProcessQueue
+      VisibilityTimeout: 900
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - AudioProcessDLQ
+          - Arn
+        maxReceiveCount: 5
+  AudioPredictDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AudioPredictDLQ
+  AudioPredictQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AudioPredictQueue
+      VisibilityTimeout: 900
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+          - AudioPredictDLQ
+          - Arn
+        maxReceiveCount: 5
+  AudioProcessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 180
+      MemorySize: 1024
+      CodeUri: AudioProcessFunction
+      Layers:
+      - arn:aws:lambda:us-east-1:986684718113:layer:ffmpegLayer:1
+      Handler: audio_process.lambda_handler
+      Architectures:
+      - x86_64
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:DeleteObject
+          Resource:
+          - arn:aws:s3:::audioholdbucket/*
+          - arn:aws:s3:::audioholdbucket
+          - arn:aws:s3:::*
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:ListTables
+          Resource: arn:aws:dynamodb:us-east-1:986684718113:table/AudioStatus
+        - Effect: Allow
+          Action:
+          - elasticfilesystem:ClientMount
+          - elasticfilesystem:ClientWrite
+          - elasticfilesystem:ClientRootAccess
+          - elasticfilesystem:DescribeMountTargets
+          Resource: arn:aws:elasticfilesystem:us-east-1:986684718113:access-point/fsap-046b99ae6ad4cdf13
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - ec2:CreateNetworkInterface
+          - ec2:DescribeNetworkInterfaces
+          - ec2:DeleteNetworkInterface
+          - ec2:AssignPrivateIpAddresses
+          - ec2:UnassignPrivateIpAddresses
+          Resource: '*'
+      Events:
+        AudioWaitQueueEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - AudioProcessQueue
+              - Arn
+      FileSystemConfigs:
+      - Arn: arn:aws:elasticfilesystem:us-east-1:986684718113:access-point/fsap-046b99ae6ad4cdf13
+        LocalMountPath: /mnt/access
+    Metadata:
+      SamResourceId: AudioProcessFunction
+  AudioPredictFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 180
+      MemorySize: 1024
+      CodeUri: AudioPredictFunction
+      Handler: audio_predict.lambda_handler
+      Architectures:
+      - x86_64
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:DeleteObject
+          Resource:
+          - arn:aws:s3:::audioholdbucket/*
+          - arn:aws:s3:::audioholdbucket
+          - arn:aws:s3:::*
+        - Effect: Allow
+          Action:
+          - dynamodb:PutItem
+          - dynamodb:ListTables
+          Resource: arn:aws:dynamodb:us-east-1:986684718113:table/AudioStatus
+        - Effect: Allow
+          Action:
+          - elasticfilesystem:ClientMount
+          - elasticfilesystem:ClientWrite
+          - elasticfilesystem:ClientRootAccess
+          - elasticfilesystem:DescribeMountTargets
+          Resource: arn:aws:elasticfilesystem:us-east-1:986684718113:access-point/fsap-046b99ae6ad4cdf13
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - ec2:CreateNetworkInterface
+          - ec2:DescribeNetworkInterfaces
+          - ec2:DeleteNetworkInterface
+          - ec2:AssignPrivateIpAddresses
+          - ec2:UnassignPrivateIpAddresses
+          Resource: '*'
+      Events:
+        AudioWaitQueueEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - AudioPredictQueue
+              - Arn
+      FileSystemConfigs:
+      - Arn: arn:aws:elasticfilesystem:us-east-1:986684718113:access-point/fsap-046b99ae6ad4cdf13
+        LocalMountPath: /mnt/access
+    Metadata:
+      SamResourceId: AudioPredictFunction
+  AudioProcessQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: AudioProcessQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+          - sqs:SendMessage
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          - sqs:GetQueueAttributes
+          Resource:
+            Fn::GetAtt:
+            - AudioProcessFunction
+            - Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: arn:aws:s3:*:*:audioholdbucket
+        - Effect: Allow
+          Principal:
+            Service: s3.amazonaws.com
+          Action:
+          - SQS:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - AudioProcessQueue
+            - Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: arn:aws:s3:*:*:audioholdbucket
+  AudioPredictQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: AudioPredictQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+          - sqs:SendMessage
+          - sqs:ReceiveMessage
+          - sqs:DeleteMessage
+          - sqs:GetQueueAttributes
+          Resource:
+            Fn::GetAtt:
+            - AudioPredictFunction
+            - Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: arn:aws:s3:*:*:audioholdbucket
+        - Effect: Allow
+          Principal:
+            Service: s3.amazonaws.com
+          Action:
+          - SQS:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - AudioPredictQueue
+            - Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: arn:aws:s3:*:*:audioholdbucket
+Outputs:
+  AudioUploadApi:
+    Description: API Gateway endpoint URL for Prod stage for Upload Audio API function
+    Value:
+      Fn::Sub: https://${AudioUploadGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/
+  HealthCheckFunction:
+    Description: HealthCheckFunction Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - HealthCheckFunction
+      - Arn
+  HealthCheckFunctionIamRole:
+    Description: Implicit IAM Role created for HealthCheckFunction
+    Value:
+      Fn::GetAtt:
+      - HealthCheckFunctionRole
+      - Arn
